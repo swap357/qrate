@@ -36,7 +36,7 @@ Repository = "https://github.com/swap357/qrate"
 
 [tool.hatch.version]
 source = "vcs"
-tag-pattern = "v*"
+tag-pattern = "^v(.+)$"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/qrate"]
