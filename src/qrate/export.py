@@ -356,75 +356,75 @@ def export_gallery(
     ]
 
     if scored:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TextColumn("({task.completed}/{task.total})"),
-                TimeElapsedColumn(),
-                console=None,
-            ) as progress:
-                task = progress.add_task("[cyan]Exporting gallery...", total=len(scored))
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("({task.completed}/{task.total})"),
+            TimeElapsedColumn(),
+            console=None,
+        ) as progress:
+            task = progress.add_task("[cyan]Exporting gallery...", total=len(scored))
 
-                for rank, (raw_path, name, preview_path, s) in enumerate(scored, 1):
-                    progress.update(task, description=f"[cyan]Exporting {name}...")
+            for rank, (raw_path, name, preview_path, s) in enumerate(scored, 1):
+                progress.update(task, description=f"[cyan]Exporting {name}...")
 
-                    raw_src = Path(raw_path)
-                    stem = raw_src.stem
-                    suffix = raw_src.suffix
+                raw_src = Path(raw_path)
+                stem = raw_src.stem
+                suffix = raw_src.suffix
 
-                    # Copy RAW file
-                    raw_out = raw_dir / f"{rank:03d}_{stem}{suffix}"
-                    if raw_src.exists():
-                        shutil.copy2(raw_src, raw_out)
+                # Copy RAW file
+                raw_out = raw_dir / f"{rank:03d}_{stem}{suffix}"
+                if raw_src.exists():
+                    shutil.copy2(raw_src, raw_out)
 
-                    # Copy JPG preview
-                    jpg_out = jpg_dir / f"{rank:03d}_{stem}.jpg"
-                    shutil.copy2(preview_path, jpg_out)
+                # Copy JPG preview
+                jpg_out = jpg_dir / f"{rank:03d}_{stem}.jpg"
+                shutil.copy2(preview_path, jpg_out)
 
-                    exported += 1
+                exported += 1
 
-                    # Add to scores with aggregated breakdown
-                    tech_score = s.technical_score
-                    comp_score = s.composition_score
-                    color_score = s.color_score
-                    uniq_score = s.uniqueness
+                # Add to scores with aggregated breakdown
+                tech_score = s.technical_score
+                comp_score = s.composition_score
+                color_score = s.color_score
+                uniq_score = s.uniqueness
 
-                    # Calculate weighted contributions
-                    w_tech = s.WEIGHT_TECHNICAL
-                    w_comp = s.WEIGHT_COMPOSITION
-                    w_color = s.WEIGHT_COLOR
-                    w_uniq = s.WEIGHT_UNIQUENESS
+                # Calculate weighted contributions
+                w_tech = s.WEIGHT_TECHNICAL
+                w_comp = s.WEIGHT_COMPOSITION
+                w_color = s.WEIGHT_COLOR
+                w_uniq = s.WEIGHT_UNIQUENESS
 
-                    # Check if obstruction penalty applies
-                    obstruction_penalty = 1.0 - s.composition.obstruction
-                    if obstruction_penalty > 0.15:
-                        shift = obstruction_penalty * 0.15
-                        w_tech = max(0.15, w_tech - shift)
-                        w_comp = min(0.45, w_comp + shift)
+                # Check if obstruction penalty applies
+                obstruction_penalty = 1.0 - s.composition.obstruction
+                if obstruction_penalty > 0.15:
+                    shift = obstruction_penalty * 0.15
+                    w_tech = max(0.15, w_tech - shift)
+                    w_comp = min(0.45, w_comp + shift)
 
-                    tech_contrib = tech_score * w_tech * 100
-                    comp_contrib = comp_score * w_comp * 100
-                    color_contrib = color_score * w_color * 100
-                    uniq_contrib = uniq_score * w_uniq * 100
+                tech_contrib = tech_score * w_tech * 100
+                comp_contrib = comp_score * w_comp * 100
+                color_contrib = color_score * w_color * 100
+                uniq_contrib = uniq_score * w_uniq * 100
 
-                    score_lines.append(f"{rank:3d}   {s.final_score:5.1f}  {name}")
-                    score_lines.append(
-                        f"      Technical:   {tech_score:.2f} (weight {w_tech:.0%}) → {tech_contrib:.1f} pts"
-                    )
-                    score_lines.append(
-                        f"      Composition: {comp_score:.2f} (weight {w_comp:.0%}) → {comp_contrib:.1f} pts"
-                    )
-                    score_lines.append(
-                        f"      Color:       {color_score:.2f} (weight {w_color:.0%}) → {color_contrib:.1f} pts"
-                    )
-                    score_lines.append(
-                        f"      Uniqueness:  {uniq_score:.2f} (weight {w_uniq:.0%}) → {uniq_contrib:.1f} pts"
-                    )
-                    score_lines.append("")
+                score_lines.append(f"{rank:3d}   {s.final_score:5.1f}  {name}")
+                score_lines.append(
+                    f"      Technical:   {tech_score:.2f} (weight {w_tech:.0%}) → {tech_contrib:.1f} pts"
+                )
+                score_lines.append(
+                    f"      Composition: {comp_score:.2f} (weight {w_comp:.0%}) → {comp_contrib:.1f} pts"
+                )
+                score_lines.append(
+                    f"      Color:       {color_score:.2f} (weight {w_color:.0%}) → {color_contrib:.1f} pts"
+                )
+                score_lines.append(
+                    f"      Uniqueness:  {uniq_score:.2f} (weight {w_uniq:.0%}) → {uniq_contrib:.1f} pts"
+                )
+                score_lines.append("")
 
-                    progress.advance(task)
+                progress.advance(task)
 
     # Write scores
     scores_path = out_dir / "scores.txt"
