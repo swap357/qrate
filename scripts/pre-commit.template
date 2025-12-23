@@ -1,0 +1,46 @@
+#!/bin/bash
+# Pre-commit hook to run checks before committing
+# Copy this to .git/hooks/pre-commit to enable:
+#   cp scripts/pre-commit.template .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+
+set -e
+
+# Get the directory of the script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+cd "$PROJECT_ROOT"
+
+echo "Running pre-commit checks..."
+
+# Run ruff check
+echo "  [1/4] Running ruff check..."
+ruff check src tests || {
+    echo "❌ ruff check failed. Run 'ruff check src tests' to see errors."
+    exit 1
+}
+
+# Run ruff format check
+echo "  [2/4] Running ruff format check..."
+ruff format --check src tests || {
+    echo "❌ ruff format check failed. Run 'ruff format src tests' to fix."
+    exit 1
+}
+
+# Run mypy
+echo "  [3/4] Running mypy..."
+mypy src || {
+    echo "❌ mypy check failed. Run 'mypy src' to see errors."
+    exit 1
+}
+
+# Run pytest with coverage
+echo "  [4/4] Running pytest with coverage..."
+pytest --cov=src/qrate --cov-report=term-missing --cov-fail-under=80 || {
+    echo "❌ pytest failed. Run 'pytest --cov=src/qrate --cov-report=term-missing --cov-fail-under=80' to see errors."
+    exit 1
+}
+
+echo "✅ All pre-commit checks passed!"
+
