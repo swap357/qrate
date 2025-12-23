@@ -5,12 +5,18 @@ build-backend = "hatchling.build"
 [project]
 name = "qrate"
 version = "0.1.0"
-description = "Select RAW files and export paths to text file"
+description = "Image curation tool"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "swap357" }]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "rawpy>=0.18",
+    "Pillow>=10.0",
+    "imagehash>=4.3",
+    "blake3>=0.4",
+    "numpy>=1.24",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -19,6 +25,7 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.5.0",
 ]
+cv = ["opencv-python-headless>=4.8"]
 
 [project.scripts]
 qrate = "qrate:main"

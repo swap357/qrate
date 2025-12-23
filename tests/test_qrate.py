@@ -3,20 +3,41 @@
 import time
 from pathlib import Path
 
-from qrate import find_raw_files, main, select_newest, write_export
+from qrate import RAW_EXTENSIONS, find_raw_files, main, select_newest, write_export
 
 
 def test_find_raw_files(tmp_path: Path):
-    """Find .NEF files recursively."""
+    """Find RAW files recursively."""
     subdir = tmp_path / "subdir"
     subdir.mkdir()
     (tmp_path / "a.NEF").touch()
-    (subdir / "b.NEF").touch()
-    (tmp_path / "c.jpg").touch()
+    (subdir / "b.CR2").touch()
+    (tmp_path / "c.ARW").touch()
+    (tmp_path / "d.jpg").touch()
 
-    files = find_raw_files(tmp_path, ".NEF")
-    assert len(files) == 2
-    assert all(f.suffix == ".NEF" for f in files)
+    files = find_raw_files(tmp_path)
+    assert len(files) == 3
+    assert all(f.suffix.lower() in RAW_EXTENSIONS for f in files)
+
+
+def test_find_raw_files_case_insensitive(tmp_path: Path):
+    """Find RAW files regardless of case."""
+    (tmp_path / "a.nef").touch()
+    (tmp_path / "b.NEF").touch()
+    (tmp_path / "c.Nef").touch()
+
+    files = find_raw_files(tmp_path)
+    assert len(files) == 3
+
+
+def test_find_raw_files_custom_extensions(tmp_path: Path):
+    """Find files with custom extensions."""
+    (tmp_path / "a.NEF").touch()
+    (tmp_path / "b.CR2").touch()
+
+    files = find_raw_files(tmp_path, frozenset({".nef"}))
+    assert len(files) == 1
+    assert files[0].suffix == ".NEF"
 
 
 def test_select_newest(tmp_path: Path):
@@ -68,7 +89,18 @@ def test_main_integration(tmp_path: Path):
         time.sleep(0.01)
 
     out = tmp_path / "export.txt"
-    result = main([str(tmp_path / "input"), "--out", str(out), "--n", "3"])
+    result = main(
+        [
+            "select",
+            str(tmp_path / "input"),
+            "--out",
+            str(out),
+            "--n",
+            "3",
+            "--ext",
+            ".NEF",
+        ]
+    )
 
     assert result == 0
     assert out.exists()
@@ -84,7 +116,9 @@ def test_main_empty_dir(tmp_path: Path):
     (tmp_path / "empty").mkdir()
     out = tmp_path / "export.txt"
 
-    result = main([str(tmp_path / "empty"), "--out", str(out)])
+    result = main(
+        ["select", str(tmp_path / "empty"), "--out", str(out), "--ext", ".NEF"]
+    )
 
     assert result == 0
     content = out.read_text()
@@ -93,5 +127,92 @@ def test_main_empty_dir(tmp_path: Path):
 
 def test_main_invalid_dir(tmp_path: Path):
     """Error on invalid directory."""
-    result = main([str(tmp_path / "nonexistent"), "--out", "out.txt"])
+    result = main(["select", str(tmp_path / "nonexistent"), "--out", "out.txt"])
     assert result == 1
+
+
+def test_index_command(tmp_path: Path):
+    """Test index command."""
+    (tmp_path / "a.NEF").touch()
+    (tmp_path / "b.CR2").touch()
+
+    result = main(["index", str(tmp_path)])
+    assert result == 0
+
+    # Check database was created
+    db_path = tmp_path / ".qrate.db"
+    assert db_path.exists()
+
+
+def test_status_command(tmp_path: Path):
+    """Test status command."""
+    (tmp_path / "a.NEF").touch()
+    main(["index", str(tmp_path)])
+
+    result = main(["status", str(tmp_path)])
+    assert result == 0
+
+
+def test_index_incremental(tmp_path: Path):
+    """Test that index is incremental."""
+    (tmp_path / "a.NEF").touch()
+    main(["index", str(tmp_path)])
+
+    # Second index should skip unchanged files
+    result = main(["index", str(tmp_path)])
+    assert result == 0
+
+
+def test_cull_command(tmp_path: Path):
+    """Test cull command."""
+    (tmp_path / "a.NEF").touch()
+    main(["index", str(tmp_path)])
+
+    result = main(["cull", str(tmp_path)])
+    assert result == 0
+
+
+def test_export_list_command(tmp_path: Path):
+    """Test export command with list format."""
+    (tmp_path / "a.NEF").touch()
+    main(["index", str(tmp_path)])
+
+    out = tmp_path / "export.txt"
+    result = main(["export", str(tmp_path), "--out", str(out), "--format", "list"])
+    assert result == 0
+    assert out.exists()
+
+
+def test_export_copy_command(tmp_path: Path):
+    """Test export command with copy format."""
+    (tmp_path / "a.NEF").write_bytes(b"fake raw data")
+    main(["index", str(tmp_path)])
+
+    out_dir = tmp_path / "exported"
+    result = main(["export", str(tmp_path), "--out", str(out_dir), "--format", "copy"])
+    assert result == 0
+    assert out_dir.exists()
+    assert len(list(out_dir.iterdir())) == 1
+
+
+def test_export_xmp_command(tmp_path: Path):
+    """Test export command with xmp format."""
+    nef = tmp_path / "a.NEF"
+    nef.write_bytes(b"fake raw data")
+    main(["index", str(tmp_path)])
+
+    # XMP format writes sidecars next to originals, not to --out
+    result = main(
+        [
+            "export",
+            str(tmp_path),
+            "--out",
+            str(tmp_path),
+            "--format",
+            "xmp",
+            "--rating",
+            "4",
+        ]
+    )
+    assert result == 0
+    assert (tmp_path / "a.NEF.xmp").exists()
