@@ -24,7 +24,7 @@ except ImportError:
     except ImportError:
         _get_version = None  # type: ignore[assignment]
 
-if _get_version:
+if _get_version is not None:
     try:
         __version__ = _get_version("qrate")
     except Exception:
