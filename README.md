@@ -177,3 +177,27 @@ NEF, CR2, CR3, ARW, DNG, RAF, ORF, RW2, PEF
 - `imagehash` — perceptual hashing
 - `numpy`, `scipy` — numerical analysis
 - `opencv-python-headless` (optional) — advanced CV features
+
+## Development
+
+Install development dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
+Run checks before committing:
+
+```bash
+# Run all checks (lint, format, type, test)
+./scripts/check.sh
+
+# Or install pre-commit hook (runs automatically on commit)
+chmod +x .git/hooks/pre-commit
+```
+
+The pre-commit hook runs:
+- `ruff check` — linting
+- `ruff format --check` — format check
+- `mypy` — type checking
+- `pytest --cov` — tests with 80% coverage requirement
