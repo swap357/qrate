@@ -9,7 +9,15 @@ from pathlib import Path
 
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
 
-__version__ = "0.1.0"
+try:
+    from importlib.metadata import version
+
+    __version__ = version("qrate")
+except ImportError:
+    # Fallback for Python < 3.8
+    from importlib_metadata import version  # type: ignore[import-untyped]
+
+    __version__ = version("qrate")
 
 # Supported RAW formats (case-insensitive matching)
 RAW_EXTENSIONS = frozenset({".nef", ".cr2", ".arw", ".dng"})

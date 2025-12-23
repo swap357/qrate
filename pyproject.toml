@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "qrate"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Image curation tool"
 readme = "README.md"
 license = { text = "MIT" }
@@ -15,7 +15,7 @@ dependencies = [
     "Pillow>=10.0",
     "imagehash>=4.3",
     "blake3>=0.4",
-    "numpy>=1.24,<2",
+    "numpy>=1.24",
     "rich>=13.0",
 ]
 
@@ -33,6 +33,10 @@ qrate = "qrate:main"
 
 [project.urls]
 Repository = "https://github.com/swap357/qrate"
+
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "v*"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/qrate"]
