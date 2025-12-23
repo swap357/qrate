@@ -7,6 +7,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
+
 __version__ = "0.1.0"
 
 # Supported RAW formats (case-insensitive matching)
@@ -242,64 +244,84 @@ def cmd_index(directory: Path) -> int:
 
     indexed = 0
     skipped = 0
-    for path in files:
-        resolved = str(path.resolve())
-        if resolved not in needs_index:
-            skipped += 1
-            continue
+    
+    total = len(needs_index)
+    if total == 0:
+        print(f"All {len(files)} files already indexed")
+        print(f"Total: {db.count_images()} files in index")
+        return 0
 
-        stat = path.stat()
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("({task.completed}/{task.total})"),
+        TimeElapsedColumn(),
+        console=None,
+    ) as progress:
+        task = progress.add_task("[cyan]Indexing files...", total=total)
+        
+        for path in files:
+            resolved = str(path.resolve())
+            if resolved not in needs_index:
+                skipped += 1
+                continue
 
-        # Extract EXIF
-        exif = extract_exif(path)
+            progress.update(task, description=f"[cyan]Processing {path.name}...")
+            stat = path.stat()
 
-        # Extract preview
-        preview_path = extract_preview(path, preview_dir)
+            # Extract EXIF
+            exif = extract_exif(path)
 
-        # Compute hashes
-        file_hash = compute_file_hash(path)
+            # Extract preview
+            preview_path = extract_preview(path, preview_dir)
 
-        # Compute quality scores and perceptual hash from preview (faster)
-        phash = None
-        sharpness = None
-        exposure = None
-        noise = None
-        if preview_path and preview_path.exists():
-            phash = compute_perceptual_hash(preview_path)
-            sharpness = compute_sharpness(preview_path)
-            exposure = compute_exposure_score(preview_path)
-            noise = estimate_noise(preview_path, exif.iso)
+            # Compute hashes
+            file_hash = compute_file_hash(path)
 
-        record = ImageRecord(
-            path=resolved,
-            hash_blake3=file_hash,
-            hash_perceptual=phash,
-            exif_timestamp=exif.timestamp,
-            exif_iso=exif.iso,
-            exif_shutter=exif.shutter,
-            exif_aperture=exif.aperture,
-            exif_focal_length=exif.focal_length,
-            preview_path=str(preview_path) if preview_path else None,
-            file_mtime=stat.st_mtime,
-            file_size=stat.st_size,
-            indexed_at=datetime.now(UTC),
-        )
-        db.upsert_image(record)
+            # Compute quality scores and perceptual hash from preview (faster)
+            phash = None
+            sharpness = None
+            exposure = None
+            noise = None
+            if preview_path and preview_path.exists():
+                phash = compute_perceptual_hash(preview_path)
+                sharpness = compute_sharpness(preview_path)
+                exposure = compute_exposure_score(preview_path)
+                noise = estimate_noise(preview_path, exif.iso)
 
-        # Store quality scores
-        if sharpness is not None:
-            db.upsert_quality(
-                QualityScores(
-                    path=resolved,
-                    sharpness=sharpness,
-                    exposure_score=exposure,
-                    noise_estimate=noise,
-                )
+            record = ImageRecord(
+                path=resolved,
+                hash_blake3=file_hash,
+                hash_perceptual=phash,
+                exif_timestamp=exif.timestamp,
+                exif_iso=exif.iso,
+                exif_shutter=exif.shutter,
+                exif_aperture=exif.aperture,
+                exif_focal_length=exif.focal_length,
+                preview_path=str(preview_path) if preview_path else None,
+                file_mtime=stat.st_mtime,
+                file_size=stat.st_size,
+                indexed_at=datetime.now(UTC),
             )
+            db.upsert_image(record)
 
-        indexed += 1
+            # Store quality scores
+            if sharpness is not None:
+                db.upsert_quality(
+                    QualityScores(
+                        path=resolved,
+                        sharpness=sharpness,
+                        exposure_score=exposure,
+                        noise_estimate=noise,
+                    )
+                )
 
-    print(f"Indexed {indexed} files, skipped {skipped} unchanged")
+            indexed += 1
+            progress.advance(task)
+
+    print(f"\n✓ Indexed {indexed} files, skipped {skipped} unchanged")
     print(f"Total: {db.count_images()} files in index")
     return 0
 
@@ -444,35 +466,53 @@ def cmd_score(directory: Path, top: int, verbose: bool) -> int:
     # Collect all perceptual hashes for uniqueness scoring
     all_hashes = [img.hash_perceptual for img in images if img.hash_perceptual]
 
-    print(f"Scoring {len(images)} images...")
-    print()
-
     results: list[tuple[str, ExhibitionScore]] = []
+    
+    # Filter to images with previews
+    images_with_previews = [
+        img for img in images
+        if img.preview_path and P(img.preview_path).exists()
+    ]
+    
+    if not images_with_previews:
+        print("No images with previews found. Run 'qrate index' first.", file=sys.stderr)
+        return 1
 
-    for img in images:
-        # Use preview for scoring (faster)
-        preview_path = P(img.preview_path) if img.preview_path else None
-        if not preview_path or not preview_path.exists():
-            continue
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("({task.completed}/{task.total})"),
+        TimeElapsedColumn(),
+        console=None,
+    ) as progress:
+        task = progress.add_task("[cyan]Scoring images...", total=len(images_with_previews))
+        
+        for img in images_with_previews:
+            preview_path = P(img.preview_path)
+            progress.update(task, description=f"[cyan]Scoring {Path(img.path).name}...")
 
-        # Reuse existing technical scores from DB
-        quality = db.get_quality(img.path)
-        existing_tech = None
-        if quality:
-            existing_tech = TechnicalScores(
-                sharpness=quality.sharpness or 0,
-                exposure=quality.exposure_score or 0,
-                noise=quality.noise_estimate or 0,
-            )
+            # Reuse existing technical scores from DB
+            quality = db.get_quality(img.path)
+            existing_tech = None
+            if quality:
+                existing_tech = TechnicalScores(
+                    sharpness=quality.sharpness or 0,
+                    exposure=quality.exposure_score or 0,
+                    noise=quality.noise_estimate or 0,
+                )
 
-        try:
-            score = score_image(preview_path, existing_tech)
-            # Add uniqueness score
-            if img.hash_perceptual:
-                score.uniqueness = score_uniqueness(img.hash_perceptual, all_hashes)
-            results.append((img.path, score))
-        except Exception as e:
-            print(f"  Warning: failed to score {P(img.path).name}: {e}")
+            try:
+                score = score_image(preview_path, existing_tech)
+                # Add uniqueness score
+                if img.hash_perceptual:
+                    score.uniqueness = score_uniqueness(img.hash_perceptual, all_hashes)
+                results.append((img.path, score))
+            except Exception as e:
+                print(f"  Warning: failed to score {P(img.path).name}: {e}")
+            
+            progress.advance(task)
 
     # Sort by final score
     results.sort(key=lambda x: x[1].final_score, reverse=True)
