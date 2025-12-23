@@ -21,6 +21,7 @@ except ImportError:
     # Fallback for Python < 3.8
     try:
         from importlib_metadata import version as _get_version_fallback  # type: ignore[import-not-found,no-redef]
+
         _get_version = _get_version_fallback
     except ImportError:
         _get_version = None  # type: ignore[assignment]
