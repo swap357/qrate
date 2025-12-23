@@ -7,11 +7,15 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: pypi  # Use pypi environment for trusted publishing
     permissions:
+      contents: read  # Required to checkout code
       id-token: write  # Required for trusted publishing
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-tags: true
 
     - name: Set up Python
       uses: actions/setup-python@v5
