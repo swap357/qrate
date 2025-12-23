@@ -16,14 +16,21 @@ from rich.progress import (
 )
 
 try:
-    from importlib.metadata import version
-
-    __version__ = version("qrate")
+    from importlib.metadata import version as _get_version
 except ImportError:
     # Fallback for Python < 3.8
-    from importlib_metadata import version  # type: ignore[import-untyped]
+    try:
+        from importlib_metadata import version as _get_version  # type: ignore[import-untyped]
+    except ImportError:
+        _get_version = None  # type: ignore[assignment]
 
-    __version__ = version("qrate")
+if _get_version:
+    try:
+        __version__ = _get_version("qrate")
+    except Exception:
+        __version__ = "0.0.0"
+else:
+    __version__ = "0.0.0"
 
 # Supported RAW formats (case-insensitive matching)
 RAW_EXTENSIONS = frozenset({".nef", ".cr2", ".arw", ".dng"})
