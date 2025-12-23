@@ -361,9 +361,10 @@ def export_gallery(
 
             for rank, (raw_path, name, preview_path, s) in enumerate(scored, 1):
                 progress.update(task, description=f"[cyan]Exporting {name}...")
-        raw_src = Path(raw_path)
-        stem = raw_src.stem
-        suffix = raw_src.suffix
+                
+                raw_src = Path(raw_path)
+                stem = raw_src.stem
+                suffix = raw_src.suffix
 
                 # Copy RAW file
                 raw_out = raw_dir / f"{rank:03d}_{stem}{suffix}"
