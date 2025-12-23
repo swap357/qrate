@@ -7,15 +7,14 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: pypi  # Use pypi environment for trusted publishing
+    environment:
+      name: pypi
+      url: https://pypi.org/p/qrate
     permissions:
-      contents: read  # Required to checkout code
-      id-token: write  # Required for trusted publishing
+      id-token: write
 
     steps:
     - uses: actions/checkout@v4
-      with:
-        fetch-tags: true
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -30,7 +29,7 @@ jobs:
     - name: Build package
       run: python -m build
 
-    - name: Publish to PyPI
+    - name: Publish distribution to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       # Note: Configure trusted publishing on PyPI first
       # Or use tokens (less secure):
