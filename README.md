@@ -23,8 +23,8 @@ qrate score /path/to/photos --top 20 --verbose
 # Detect bursts and select best shots
 qrate cull /path/to/photos
 
-# Export top images
-qrate export /path/to/photos --out picks.txt --top 50
+# Export top images as gallery (JPGs + scores)
+qrate export /path/to/photos --out picks --format gallery --top 10
 ```
 
 ## Commands
