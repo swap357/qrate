@@ -216,3 +216,69 @@ def test_export_xmp_command(tmp_path: Path):
     )
     assert result == 0
     assert (tmp_path / "a.NEF.xmp").exists()
+
+
+def test_score_command(tmp_path: Path):
+    """Test score command."""
+    # Create a fake preview
+    preview_dir = tmp_path / ".qrate_previews"
+    preview_dir.mkdir()
+
+    # Create minimal JPEG
+    from PIL import Image
+
+    img = Image.new("RGB", (100, 100), (128, 128, 128))
+    img.save(preview_dir / "a_preview.jpg", "JPEG")
+
+    (tmp_path / "a.NEF").touch()
+    main(["index", str(tmp_path)])
+
+    result = main(["score", str(tmp_path), "--top", "5"])
+    assert result == 0
+
+
+def test_score_command_verbose(tmp_path: Path):
+    """Test score command with verbose output."""
+    preview_dir = tmp_path / ".qrate_previews"
+    preview_dir.mkdir()
+
+    from PIL import Image
+
+    img = Image.new("RGB", (100, 100), (128, 128, 128))
+    img.save(preview_dir / "a_preview.jpg", "JPEG")
+
+    (tmp_path / "a.NEF").touch()
+    main(["index", str(tmp_path)])
+
+    result = main(["score", str(tmp_path), "--top", "5", "--verbose"])
+    assert result == 0
+
+
+def test_score_command_no_images(tmp_path: Path):
+    """Test score command with no images."""
+    result = main(["score", str(tmp_path)])
+    assert result == 1  # Should fail - no images indexed
+
+
+def test_cull_no_images(tmp_path: Path):
+    """Test cull command with no indexed images."""
+    result = main(["cull", str(tmp_path)])
+    assert result == 1
+
+
+def test_export_no_images(tmp_path: Path):
+    """Test export command with no indexed images."""
+    result = main(["export", str(tmp_path), "--out", str(tmp_path / "out.txt")])
+    assert result == 1
+
+
+def test_status_invalid_dir(tmp_path: Path):
+    """Test status on invalid directory."""
+    result = main(["status", str(tmp_path / "nonexistent")])
+    assert result == 1
+
+
+def test_index_invalid_dir(tmp_path: Path):
+    """Test index on invalid directory."""
+    result = main(["index", str(tmp_path / "nonexistent")])
+    assert result == 1

@@ -21,7 +21,6 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
-from PIL.ExifTags import TAGS
 
 
 def auto_orient(img: Image.Image) -> Image.Image:
@@ -34,35 +33,32 @@ def auto_orient(img: Image.Image) -> Image.Image:
     Returns correctly oriented image (or original if no EXIF).
     """
     try:
-        exif = img._getexif()
-        if exif is None:
+        exif = img.getexif()
+        if not exif:
             return img
 
-        # Find orientation tag (tag 274)
-        orientation = None
-        for tag_id, value in exif.items():
-            tag = TAGS.get(tag_id, tag_id)
-            if tag == "Orientation":
-                orientation = value
-                break
-
+        # Orientation is tag 274
+        orientation = exif.get(274)
         if orientation is None:
             return img
 
         # Apply rotation/flip based on EXIF orientation
-        # See: https://exiftool.org/TagNames/EXIF.html
         if orientation == 2:
-            return img.transpose(Image.FLIP_LEFT_RIGHT)
+            return img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         elif orientation == 3:
             return img.rotate(180, expand=True)
         elif orientation == 4:
-            return img.transpose(Image.FLIP_TOP_BOTTOM)
+            return img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
         elif orientation == 5:
-            return img.transpose(Image.FLIP_LEFT_RIGHT).rotate(270, expand=True)
+            return img.transpose(Image.Transpose.FLIP_LEFT_RIGHT).rotate(
+                270, expand=True
+            )
         elif orientation == 6:
             return img.rotate(270, expand=True)
         elif orientation == 7:
-            return img.transpose(Image.FLIP_LEFT_RIGHT).rotate(90, expand=True)
+            return img.transpose(Image.Transpose.FLIP_LEFT_RIGHT).rotate(
+                90, expand=True
+            )
         elif orientation == 8:
             return img.rotate(90, expand=True)
         else:
