@@ -7,7 +7,13 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    BarColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
 try:
     from importlib.metadata import version
@@ -252,7 +258,7 @@ def cmd_index(directory: Path) -> int:
 
     indexed = 0
     skipped = 0
-    
+
     total = len(needs_index)
     if total == 0:
         print(f"All {len(files)} files already indexed")
@@ -269,7 +275,7 @@ def cmd_index(directory: Path) -> int:
         console=None,
     ) as progress:
         task = progress.add_task("[cyan]Indexing files...", total=total)
-        
+
         for path in files:
             resolved = str(path.resolve())
             if resolved not in needs_index:
@@ -475,15 +481,16 @@ def cmd_score(directory: Path, top: int, verbose: bool) -> int:
     all_hashes = [img.hash_perceptual for img in images if img.hash_perceptual]
 
     results: list[tuple[str, ExhibitionScore]] = []
-    
+
     # Filter to images with previews
     images_with_previews = [
-        img for img in images
-        if img.preview_path and P(img.preview_path).exists()
+        img for img in images if img.preview_path and P(img.preview_path).exists()
     ]
-    
+
     if not images_with_previews:
-        print("No images with previews found. Run 'qrate index' first.", file=sys.stderr)
+        print(
+            "No images with previews found. Run 'qrate index' first.", file=sys.stderr
+        )
         return 1
 
     with Progress(
@@ -495,9 +502,13 @@ def cmd_score(directory: Path, top: int, verbose: bool) -> int:
         TimeElapsedColumn(),
         console=None,
     ) as progress:
-        task = progress.add_task("[cyan]Scoring images...", total=len(images_with_previews))
-        
+        task = progress.add_task(
+            "[cyan]Scoring images...", total=len(images_with_previews)
+        )
+
         for img in images_with_previews:
+            if not img.preview_path:
+                continue
             preview_path = P(img.preview_path)
             progress.update(task, description=f"[cyan]Scoring {Path(img.path).name}...")
 
@@ -519,7 +530,7 @@ def cmd_score(directory: Path, top: int, verbose: bool) -> int:
                 results.append((img.path, score))
             except Exception as e:
                 print(f"  Warning: failed to score {P(img.path).name}: {e}")
-            
+
             progress.advance(task)
 
     # Sort by final score

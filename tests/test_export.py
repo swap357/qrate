@@ -167,3 +167,58 @@ class TestSelectForExport:
         paths = select_for_export(db, min_sharpness=500)
         assert len(paths) == 1
         assert "/sharp.nef" in paths
+
+
+class TestExportGallery:
+    def test_export_gallery_no_images(self, tmp_path: Path):
+        from qrate.db import get_db
+        from qrate.export import export_gallery
+
+        db = get_db(tmp_path)
+        out_dir = tmp_path / "gallery"
+        source_dir = tmp_path
+
+        count = export_gallery(db, out_dir, source_dir, n=10)
+        assert count == 0
+        assert (out_dir / "scores.txt").exists()
+        content = (out_dir / "scores.txt").read_text()
+        assert "# count: 0" in content
+
+    def test_export_gallery_with_images(self, tmp_path: Path):
+        from PIL import Image
+
+        from qrate.db import ImageRecord, get_db
+        from qrate.export import export_gallery
+
+        # Setup: create preview directory and images
+        source_dir = tmp_path / "source"
+        source_dir.mkdir()
+        preview_dir = source_dir / ".qrate_previews"
+        preview_dir.mkdir(parents=True)
+
+        # Create test images
+        img1_path = source_dir / "photo1.nef"
+        img1_path.write_bytes(b"raw1")
+        preview1 = preview_dir / "photo1_preview.jpg"
+        Image.new("RGB", (100, 100), color=(255, 0, 0)).save(preview1)
+
+        img2_path = source_dir / "photo2.nef"
+        img2_path.write_bytes(b"raw2")
+        preview2 = preview_dir / "photo2_preview.jpg"
+        Image.new("RGB", (100, 100), color=(0, 255, 0)).save(preview2)
+
+        # Setup database
+        db = get_db(tmp_path)
+        db.upsert_image(ImageRecord(path=str(img1_path), preview_path=str(preview1)))
+        db.upsert_image(ImageRecord(path=str(img2_path), preview_path=str(preview2)))
+
+        # Export gallery
+        out_dir = tmp_path / "gallery"
+        count = export_gallery(db, out_dir, source_dir, n=10)
+
+        assert count == 2
+        assert (out_dir / "raw").exists()
+        assert (out_dir / "jpg").exists()
+        assert (out_dir / "scores.txt").exists()
+        assert len(list((out_dir / "raw").glob("*.nef"))) == 2
+        assert len(list((out_dir / "jpg").glob("*.jpg"))) == 2
