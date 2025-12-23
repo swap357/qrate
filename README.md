@@ -189,10 +189,11 @@ pip install -e ".[dev]"
 Run checks before committing:
 
 ```bash
-# Run all checks (lint, format, type, test)
+# Run all checks manually (lint, format, type, test)
 ./scripts/check.sh
 
 # Or install pre-commit hook (runs automatically on commit)
+cp scripts/pre-commit.template .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 ```
 
