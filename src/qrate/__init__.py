@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 __version__ = "0.1.0"
@@ -57,10 +56,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("input_dir", type=Path, help="Directory to scan")
     parser.add_argument("--out", type=Path, required=True, help="Output text file")
     parser.add_argument(
-        "--n", type=int, default=DEFAULT_N, help=f"Number of files (default: {DEFAULT_N})"
+        "--n",
+        type=int,
+        default=DEFAULT_N,
+        help=f"Number of files (default: {DEFAULT_N})",
     )
     parser.add_argument(
-        "--ext", default=DEFAULT_EXTENSION, help=f"File extension (default: {DEFAULT_EXTENSION})"
+        "--ext",
+        default=DEFAULT_EXTENSION,
+        help=f"File extension (default: {DEFAULT_EXTENSION})",
     )
 
     args = parser.parse_args(argv)
