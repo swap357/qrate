@@ -386,30 +386,29 @@ def export_gallery(
                 exported += 1
 
                 # Add to scores with aggregated breakdown
+                ren_score = s.renaissance_score
                 tech_score = s.technical_score
                 comp_score = s.composition_score
                 color_score = s.color_score
                 uniq_score = s.uniqueness
 
                 # Calculate weighted contributions
+                w_ren = s.WEIGHT_RENAISSANCE
                 w_tech = s.WEIGHT_TECHNICAL
                 w_comp = s.WEIGHT_COMPOSITION
                 w_color = s.WEIGHT_COLOR
                 w_uniq = s.WEIGHT_UNIQUENESS
 
-                # Check if obstruction penalty applies
-                obstruction_penalty = 1.0 - s.composition.obstruction
-                if obstruction_penalty > 0.15:
-                    shift = obstruction_penalty * 0.15
-                    w_tech = max(0.15, w_tech - shift)
-                    w_comp = min(0.45, w_comp + shift)
-
+                ren_contrib = ren_score * w_ren * 100
                 tech_contrib = tech_score * w_tech * 100
                 comp_contrib = comp_score * w_comp * 100
                 color_contrib = color_score * w_color * 100
                 uniq_contrib = uniq_score * w_uniq * 100
 
                 score_lines.append(f"{rank:3d}   {s.final_score:5.1f}  {name}")
+                score_lines.append(
+                    f"      Renaissance: {ren_score:.2f} (weight {w_ren:.0%}) → {ren_contrib:.1f} pts"
+                )
                 score_lines.append(
                     f"      Technical:   {tech_score:.2f} (weight {w_tech:.0%}) → {tech_contrib:.1f} pts"
                 )
