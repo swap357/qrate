@@ -115,6 +115,13 @@ def main(argv: list[str] | None = None) -> int:
     # index command
     index_parser = subparsers.add_parser("index", help="Index a directory of RAW files")
     index_parser.add_argument("directory", type=Path, help="Directory to index")
+    index_parser.add_argument(
+        "--workers",
+        "-j",
+        type=int,
+        default=None,
+        help="Number of parallel workers (default: CPU count - 1)",
+    )
 
     # status command
     status_parser = subparsers.add_parser("status", help="Show index status")
@@ -200,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "index":
-        return cmd_index(args.directory)
+        return cmd_index(args.directory, workers=args.workers)
     if args.command == "status":
         return cmd_status(args.directory)
     if args.command == "select":
@@ -241,17 +248,16 @@ def cmd_select(input_dir: Path, out: Path, n: int, ext: str) -> int:
     return 0
 
 
-def cmd_index(directory: Path) -> int:
-    """Index a directory of RAW files."""
-    from qrate.analyze import (
-        compute_exposure_score,
-        compute_file_hash,
-        compute_perceptual_hash,
-        compute_sharpness,
-        estimate_noise,
-    )
-    from qrate.db import ImageRecord, QualityScores, get_db
-    from qrate.ingest import extract_exif, extract_preview, get_preview_dir
+def cmd_index(directory: Path, workers: int | None = None) -> int:
+    """Index a directory of RAW files.
+
+    Args:
+        directory: Directory containing RAW files to index.
+        workers: Number of parallel workers. None = auto (CPU count - 1).
+    """
+    from qrate.db import get_db
+    from qrate.ingest import get_preview_dir
+    from qrate.parallel import get_default_workers, process_files_parallel
 
     if not directory.is_dir():
         print(f"Error: {directory} is not a directory", file=sys.stderr)
@@ -265,14 +271,27 @@ def cmd_index(directory: Path) -> int:
     paths_with_mtime = [(str(p.resolve()), p.stat().st_mtime) for p in files]
     needs_index = set(db.get_images_needing_index(paths_with_mtime))
 
-    indexed = 0
-    skipped = 0
+    # Filter to only files needing indexing
+    files_to_index = [p for p in files if str(p.resolve()) in needs_index]
+    skipped = len(files) - len(files_to_index)
 
-    total = len(needs_index)
+    total = len(files_to_index)
     if total == 0:
         print(f"All {len(files)} files already indexed")
         print(f"Total: {db.count_images()} files in index")
         return 0
+
+    # Determine worker count
+    if workers is None:
+        workers = get_default_workers()
+    workers = max(1, min(workers, total))  # Cap at file count
+
+    indexed = 0
+    errors = 0
+
+    # Show worker info
+    if workers > 1:
+        print(f"Using {workers} parallel workers")
 
     with Progress(
         SpinnerColumn(),
@@ -283,68 +302,32 @@ def cmd_index(directory: Path) -> int:
         TimeElapsedColumn(),
         console=None,
     ) as progress:
-        task = progress.add_task("[cyan]Indexing files...", total=total)
+        task = progress.add_task(
+            f"[cyan]Indexing ({workers} workers)...", total=total
+        )
 
-        for path in files:
-            resolved = str(path.resolve())
-            if resolved not in needs_index:
-                skipped += 1
-                continue
-
-            progress.update(task, description=f"[cyan]Processing {path.name}...")
-            stat = path.stat()
-
-            # Extract EXIF
-            exif = extract_exif(path)
-
-            # Extract preview
-            preview_path = extract_preview(path, preview_dir)
-
-            # Compute hashes
-            file_hash = compute_file_hash(path)
-
-            # Compute quality scores and perceptual hash from preview (faster)
-            phash = None
-            sharpness = None
-            exposure = None
-            noise = None
-            if preview_path and preview_path.exists():
-                phash = compute_perceptual_hash(preview_path)
-                sharpness = compute_sharpness(preview_path)
-                exposure = compute_exposure_score(preview_path)
-                noise = estimate_noise(preview_path, exif.iso)
-
-            record = ImageRecord(
-                path=resolved,
-                hash_blake3=file_hash,
-                hash_perceptual=phash,
-                exif_timestamp=exif.timestamp,
-                exif_iso=exif.iso,
-                exif_shutter=exif.shutter,
-                exif_aperture=exif.aperture,
-                exif_focal_length=exif.focal_length,
-                preview_path=str(preview_path) if preview_path else None,
-                file_mtime=stat.st_mtime,
-                file_size=stat.st_size,
-                indexed_at=datetime.now(UTC),
-            )
-            db.upsert_image(record)
-
-            # Store quality scores
-            if sharpness is not None:
-                db.upsert_quality(
-                    QualityScores(
-                        path=resolved,
-                        sharpness=sharpness,
-                        exposure_score=exposure,
-                        noise_estimate=noise,
+        # Process files in parallel
+        for result in process_files_parallel(files_to_index, preview_dir, workers):
+            if result.success and result.record:
+                db.upsert_image(result.record)
+                if result.quality:
+                    db.upsert_quality(result.quality)
+                indexed += 1
+            else:
+                errors += 1
+                if result.error:
+                    progress.console.print(
+                        f"[yellow]Warning: {Path(result.path).name}: {result.error}"
                     )
-                )
 
-            indexed += 1
             progress.advance(task)
 
-    print(f"\n✓ Indexed {indexed} files, skipped {skipped} unchanged")
+    # Summary
+    print(f"\n✓ Indexed {indexed} files, skipped {skipped} unchanged", end="")
+    if errors > 0:
+        print(f", {errors} errors")
+    else:
+        print()
     print(f"Total: {db.count_images()} files in index")
     return 0
 
