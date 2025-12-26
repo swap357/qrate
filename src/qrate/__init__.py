@@ -302,9 +302,7 @@ def cmd_index(directory: Path, workers: int | None = None) -> int:
         TimeElapsedColumn(),
         console=None,
     ) as progress:
-        task = progress.add_task(
-            f"[cyan]Indexing ({workers} workers)...", total=total
-        )
+        task = progress.add_task(f"[cyan]Indexing ({workers} workers)...", total=total)
 
         # Process files in parallel
         for result in process_files_parallel(files_to_index, preview_dir, workers):
