@@ -163,12 +163,12 @@ def test_index_incremental(tmp_path: Path):
     assert result == 0
 
 
-def test_cull_command(tmp_path: Path):
-    """Test cull command."""
+def test_group_bursts_command(tmp_path: Path):
+    """Test group-bursts command."""
     (tmp_path / "a.NEF").touch()
     main(["index", str(tmp_path)])
 
-    result = main(["cull", str(tmp_path)])
+    result = main(["group-bursts", str(tmp_path)])
     assert result == 0
 
 
@@ -260,9 +260,9 @@ def test_score_command_no_images(tmp_path: Path):
     assert result == 1  # Should fail - no images indexed
 
 
-def test_cull_no_images(tmp_path: Path):
-    """Test cull command with no indexed images."""
-    result = main(["cull", str(tmp_path)])
+def test_group_bursts_no_images(tmp_path: Path):
+    """Test group-bursts command with no indexed images."""
+    result = main(["group-bursts", str(tmp_path)])
     assert result == 1
 
 

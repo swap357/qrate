@@ -149,13 +149,13 @@ def main(argv: list[str] | None = None) -> int:
         help=f"File extensions, comma-separated (default: {','.join(sorted(RAW_EXTENSIONS))})",
     )
 
-    # cull command - detect bursts and mark best-of-burst
-    cull_parser = subparsers.add_parser(
-        "cull", help="Detect bursts and select best images"
+    # group-bursts command - detect bursts and mark best-of-burst
+    burst_parser = subparsers.add_parser(
+        "group-bursts", help="Detect burst sequences and mark best image in each"
     )
-    cull_parser.add_argument("directory", type=Path, help="Indexed directory")
-    cull_parser.add_argument(
-        "--burst-threshold",
+    burst_parser.add_argument("directory", type=Path, help="Indexed directory")
+    burst_parser.add_argument(
+        "--threshold",
         type=float,
         default=2.0,
         help="Seconds between burst images (default: 2.0)",
@@ -212,8 +212,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_status(args.directory)
     if args.command == "select":
         return cmd_select(args.input_dir, args.out, args.n, args.ext)
-    if args.command == "cull":
-        return cmd_cull(args.directory, args.burst_threshold)
+    if args.command == "group-bursts":
+        return cmd_group_bursts(args.directory, args.threshold)
     if args.command == "export":
         return cmd_export(
             args.directory,
@@ -350,8 +350,8 @@ def cmd_status(directory: Path) -> int:
     return 0
 
 
-def cmd_cull(directory: Path, burst_threshold: float) -> int:
-    """Detect bursts and select best images."""
+def cmd_group_bursts(directory: Path, threshold: float) -> int:
+    """Detect burst sequences and mark best image in each."""
     from qrate.db import get_db
     from qrate.group import process_bursts
 
@@ -366,7 +366,7 @@ def cmd_cull(directory: Path, burst_threshold: float) -> int:
         return 1
 
     # Detect and process bursts
-    num_bursts = process_bursts(db, burst_threshold)
+    num_bursts = process_bursts(db, threshold)
     print(f"Detected {num_bursts} burst groups")
 
     # Report duplicates
