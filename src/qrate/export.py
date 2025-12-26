@@ -7,13 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from rich.progress import (
-    Progress,
-    SpinnerColumn,
-    BarColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
+from qrate.ui import create_progress
 
 if TYPE_CHECKING:
     from qrate.db import Database
@@ -313,15 +307,7 @@ def export_gallery(
     scored = []
 
     if images_with_previews:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TextColumn("({task.completed}/{task.total})"),
-            TimeElapsedColumn(),
-            console=None,
-        ) as progress:
+        with create_progress() as progress:
             task = progress.add_task(
                 "[cyan]Scoring images...", total=len(images_with_previews)
             )
@@ -356,15 +342,7 @@ def export_gallery(
     ]
 
     if scored:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TextColumn("({task.completed}/{task.total})"),
-            TimeElapsedColumn(),
-            console=None,
-        ) as progress:
+        with create_progress() as progress:
             task = progress.add_task("[cyan]Exporting gallery...", total=len(scored))
 
             for rank, (raw_path, name, preview_path, s) in enumerate(scored, 1):

@@ -31,7 +31,9 @@ def find_exact_duplicates(db: Database) -> list[list[str]]:
 
 
 def find_near_duplicates(db: Database, threshold: int = 8) -> list[list[str]]:
-    """Find groups of near-duplicates by perceptual hash.
+    """Find groups of near-duplicates by perceptual hash using LSH.
+
+    Uses band-based locality-sensitive hashing to reduce O(n²) to ~O(n).
 
     Args:
         db: Database instance.
@@ -40,9 +42,9 @@ def find_near_duplicates(db: Database, threshold: int = 8) -> list[list[str]]:
     Returns:
         List of groups, each group is a list of near-duplicate paths.
     """
-    images = db.get_all_images()
+    from collections import defaultdict
 
-    # Filter to images with perceptual hashes
+    images = db.get_all_images()
     with_hash = [
         (img.path, img.hash_perceptual) for img in images if img.hash_perceptual
     ]
@@ -50,7 +52,15 @@ def find_near_duplicates(db: Database, threshold: int = 8) -> list[list[str]]:
     if not with_hash:
         return []
 
-    # Build groups using union-find
+    # LSH: Split 16-char hex hash into 4 bands of 4 chars each
+    # Hashes sharing any band are candidates for comparison
+    bands: dict[str, list[int]] = defaultdict(list)
+    for idx, (_, phash) in enumerate(with_hash):
+        for b in range(4):
+            band_key = f"{b}:{phash[b * 4 : (b + 1) * 4]}"
+            bands[band_key].append(idx)
+
+    # Union-find
     parent: dict[str, str] = {path: path for path, _ in with_hash}
 
     def find(x: str) -> str:
@@ -63,21 +73,27 @@ def find_near_duplicates(db: Database, threshold: int = 8) -> list[list[str]]:
         if px != py:
             parent[px] = py
 
-    # Compare all pairs (O(n^2) but fine for typical photo collections)
-    for i, (path1, hash1) in enumerate(with_hash):
-        for path2, hash2 in with_hash[i + 1 :]:
-            if hash1 and hash2 and are_near_duplicates(hash1, hash2, threshold):
-                union(path1, path2)
+    # Compare only within same bands (candidate pairs)
+    compared: set[tuple[int, int]] = set()
+    for indices in bands.values():
+        if len(indices) < 2:
+            continue
+        for i, idx1 in enumerate(indices):
+            for idx2 in indices[i + 1 :]:
+                pair = (min(idx1, idx2), max(idx1, idx2))
+                if pair in compared:
+                    continue
+                compared.add(pair)
+                path1, hash1 = with_hash[idx1]
+                path2, hash2 = with_hash[idx2]
+                if are_near_duplicates(hash1, hash2, threshold):
+                    union(path1, path2)
 
     # Group by root
-    groups: dict[str, list[str]] = {}
+    groups: dict[str, list[str]] = defaultdict(list)
     for path, _ in with_hash:
-        root = find(path)
-        if root not in groups:
-            groups[root] = []
-        groups[root].append(path)
+        groups[find(path)].append(path)
 
-    # Return only groups with more than one member
     return [g for g in groups.values() if len(g) > 1]
 
 

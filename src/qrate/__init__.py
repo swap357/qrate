@@ -7,13 +7,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from rich.progress import (
-    Progress,
-    SpinnerColumn,
-    BarColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
+from qrate.ui import create_progress
 
 try:
     from importlib.metadata import version as _get_version
@@ -293,15 +287,7 @@ def cmd_index(directory: Path, workers: int | None = None) -> int:
     if workers > 1:
         print(f"Using {workers} parallel workers")
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TextColumn("({task.completed}/{task.total})"),
-        TimeElapsedColumn(),
-        console=None,
-    ) as progress:
+    with create_progress() as progress:
         task = progress.add_task(f"[cyan]Indexing ({workers} workers)...", total=total)
 
         # Process files in parallel
@@ -445,15 +431,27 @@ def cmd_export(
 
 def cmd_score(directory: Path, top: int, verbose: bool) -> int:
     """Compute and display exhibition scores."""
+    from dataclasses import dataclass
+    from datetime import UTC
     from pathlib import Path as P
 
-    from qrate.db import get_db
+    from qrate.db import CachedScore, get_db
     from qrate.score import (
         ExhibitionScore,
         TechnicalScores,
         score_image,
         score_uniqueness,
     )
+
+    @dataclass
+    class DisplayScore:
+        """Minimal score for display (from cache)."""
+
+        final_score: float
+        technical_score: float
+        composition_score: float
+        color_score: float
+        uniqueness: float
 
     if not directory.is_dir():
         print(f"Error: {directory} is not a directory", file=sys.stderr)
@@ -466,13 +464,10 @@ def cmd_score(directory: Path, top: int, verbose: bool) -> int:
         return 1
 
     images = db.get_all_images()
-
-    # Collect all perceptual hashes for uniqueness scoring
     all_hashes = [img.hash_perceptual for img in images if img.hash_perceptual]
 
-    results: list[tuple[str, ExhibitionScore]] = []
+    results: list[tuple[str, DisplayScore | ExhibitionScore]] = []
 
-    # Filter to images with previews
     images_with_previews = [
         img for img in images if img.preview_path and P(img.preview_path).exists()
     ]
@@ -483,15 +478,8 @@ def cmd_score(directory: Path, top: int, verbose: bool) -> int:
         )
         return 1
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TextColumn("({task.completed}/{task.total})"),
-        TimeElapsedColumn(),
-        console=None,
-    ) as progress:
+    cached_count = 0
+    with create_progress() as progress:
         task = progress.add_task(
             "[cyan]Scoring images...", total=len(images_with_previews)
         )
@@ -500,9 +488,30 @@ def cmd_score(directory: Path, top: int, verbose: bool) -> int:
             if not img.preview_path:
                 continue
             preview_path = P(img.preview_path)
+            preview_mtime = preview_path.stat().st_mtime
             progress.update(task, description=f"[cyan]Scoring {Path(img.path).name}...")
 
-            # Reuse existing technical scores from DB
+            # Check cache first (skip cache for verbose - need full details)
+            if not verbose:
+                cached = db.get_score(img.path, preview_mtime)
+                if cached:
+                    results.append(
+                        (
+                            img.path,
+                            DisplayScore(
+                                final_score=cached.final_score,
+                                technical_score=cached.technical_score,
+                                composition_score=cached.composition_score,
+                                color_score=cached.color_score,
+                                uniqueness=cached.uniqueness,
+                            ),
+                        )
+                    )
+                    cached_count += 1
+                    progress.advance(task)
+                    continue
+
+            # Compute score
             quality = db.get_quality(img.path)
             existing_tech = None
             if quality:
@@ -514,14 +523,30 @@ def cmd_score(directory: Path, top: int, verbose: bool) -> int:
 
             try:
                 score = score_image(preview_path, existing_tech)
-                # Add uniqueness score
                 if img.hash_perceptual:
                     score.uniqueness = score_uniqueness(img.hash_perceptual, all_hashes)
                 results.append((img.path, score))
+
+                # Cache the score
+                db.upsert_score(
+                    CachedScore(
+                        path=img.path,
+                        final_score=score.final_score,
+                        technical_score=score.technical_score,
+                        composition_score=score.composition_score,
+                        color_score=score.color_score,
+                        uniqueness=score.uniqueness,
+                        preview_mtime=preview_mtime,
+                        scored_at=datetime.now(UTC),
+                    )
+                )
             except Exception as e:
                 print(f"  Warning: failed to score {P(img.path).name}: {e}")
 
             progress.advance(task)
+
+    if cached_count > 0:
+        print(f"  ({cached_count} from cache)")
 
     # Sort by final score
     results.sort(key=lambda x: x[1].final_score, reverse=True)
@@ -532,18 +557,18 @@ def cmd_score(directory: Path, top: int, verbose: bool) -> int:
     )
     print("-" * 80)
 
-    for i, (path, score) in enumerate(results[:top], 1):
+    for i, (path, s) in enumerate(results[:top], 1):
         name = P(path).name
         print(
-            f"{i:<5} {score.final_score:>6.1f}  "
-            f"{score.technical_score:>5.2f}  {score.composition_score:>5.2f}  "
-            f"{score.color_score:>5.2f}  {score.uniqueness:>5.2f}  {name}"
+            f"{i:<5} {s.final_score:>6.1f}  "
+            f"{s.technical_score:>5.2f}  {s.composition_score:>5.2f}  "
+            f"{s.color_score:>5.2f}  {s.uniqueness:>5.2f}  {name}"
         )
 
-        if verbose:
-            t = score.technical
-            c = score.composition
-            col = score.color
+        if verbose and isinstance(s, ExhibitionScore):
+            t = s.technical
+            c = s.composition
+            col = s.color
             print(
                 f"       Technical: sharp={t.sharpness:.0f} subj_sharp={t.subject_sharpness:.2f} exp={t.exposure:.2f} noise={t.noise:.2f}"
             )

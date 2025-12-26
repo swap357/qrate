@@ -42,6 +42,17 @@ CREATE TABLE IF NOT EXISTS burst_groups (
     PRIMARY KEY (group_id, path)
 );
 
+CREATE TABLE IF NOT EXISTS exhibition_scores (
+    path TEXT PRIMARY KEY REFERENCES images(path) ON DELETE CASCADE,
+    final_score REAL,
+    technical_score REAL,
+    composition_score REAL,
+    color_score REAL,
+    uniqueness REAL,
+    preview_mtime REAL,
+    scored_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_images_timestamp ON images(exif_timestamp);
 CREATE INDEX IF NOT EXISTS idx_images_hash_blake3 ON images(hash_blake3);
 CREATE INDEX IF NOT EXISTS idx_images_hash_perceptual ON images(hash_perceptual);
@@ -84,6 +95,20 @@ class BurstMember:
     group_id: int
     path: str
     is_best: bool = False
+
+
+@dataclass
+class CachedScore:
+    """Cached exhibition score for an image."""
+
+    path: str
+    final_score: float
+    technical_score: float
+    composition_score: float
+    color_score: float
+    uniqueness: float
+    preview_mtime: float
+    scored_at: datetime | None = None
 
 
 class Database:
@@ -314,6 +339,62 @@ class Database:
         with self.connection() as conn:
             conn.execute("DELETE FROM images WHERE path = ?", (path,))
             conn.commit()
+
+    def upsert_score(self, score: CachedScore) -> None:
+        """Upsert exhibition score for an image."""
+        with self.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO exhibition_scores
+                    (path, final_score, technical_score, composition_score,
+                     color_score, uniqueness, preview_mtime, scored_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(path) DO UPDATE SET
+                    final_score = excluded.final_score,
+                    technical_score = excluded.technical_score,
+                    composition_score = excluded.composition_score,
+                    color_score = excluded.color_score,
+                    uniqueness = excluded.uniqueness,
+                    preview_mtime = excluded.preview_mtime,
+                    scored_at = excluded.scored_at
+                """,
+                (
+                    score.path,
+                    score.final_score,
+                    score.technical_score,
+                    score.composition_score,
+                    score.color_score,
+                    score.uniqueness,
+                    score.preview_mtime,
+                    score.scored_at.isoformat() if score.scored_at else None,
+                ),
+            )
+            conn.commit()
+
+    def get_score(self, path: str, preview_mtime: float) -> CachedScore | None:
+        """Get cached score if preview hasn't changed."""
+        with self.connection() as conn:
+            row = conn.execute(
+                """SELECT * FROM exhibition_scores
+                   WHERE path = ? AND preview_mtime = ?""",
+                (path, preview_mtime),
+            ).fetchone()
+            if row is None:
+                return None
+            return CachedScore(
+                path=row["path"],
+                final_score=row["final_score"],
+                technical_score=row["technical_score"],
+                composition_score=row["composition_score"],
+                color_score=row["color_score"],
+                uniqueness=row["uniqueness"],
+                preview_mtime=row["preview_mtime"],
+                scored_at=(
+                    datetime.fromisoformat(row["scored_at"])
+                    if row["scored_at"]
+                    else None
+                ),
+            )
 
     def _row_to_image(self, row: sqlite3.Row) -> ImageRecord:
         """Convert a database row to ImageRecord."""
