@@ -144,6 +144,14 @@ cython_debug/
 # Project specific
 examples/output/
 
+# Image export directories
+picks/
+picks*/
+picks_*/
+picks2/
+picks2_*/
 
+# Test data directories
 tests/testdata/
+tests/testsdata2/
 export.txt
