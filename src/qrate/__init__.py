@@ -221,8 +221,8 @@ def main(argv: list[str] | None = None) -> int:
             args.format,
             args.top,
             args.min_sharpness,
-            not args.include_dupes,
-            not args.all_burst,
+            args.include_dupes,
+            args.all_burst,
             args.rating,
             args.label,
         )
@@ -383,8 +383,8 @@ def cmd_export(
     fmt: str,
     n: int | None,
     min_sharpness: float | None,
-    exclude_duplicates: bool,
-    best_of_burst_only: bool,
+    include_duplicates: bool,
+    include_all_burst: bool,
     rating: int,
     label: str | None,
 ) -> int:
@@ -420,8 +420,8 @@ def cmd_export(
         db,
         n=n,
         min_sharpness=min_sharpness,
-        exclude_duplicates=exclude_duplicates,
-        best_of_burst_only=best_of_burst_only,
+        exclude_duplicates=not include_duplicates,
+        best_of_burst_only=not include_all_burst,
     )
 
     if not paths:

@@ -21,7 +21,7 @@ qrate status /path/to/photos
 qrate score /path/to/photos --top 20 --verbose
 
 # Detect bursts and select best shots
-qrate cull /path/to/photos
+qrate group-bursts /path/to/photos
 
 # Export top images as gallery (JPGs + scores)
 qrate export /path/to/photos --out picks --format gallery --top 10
@@ -69,12 +69,12 @@ qrate score /path/to/photos --top 50 --verbose
 | Color | harmony, saturation_balance, contrast |
 | Collection | uniqueness |
 
-### `qrate cull <directory>`
+### `qrate group-bursts <directory>`
 
 Detect burst sequences and mark best-of-burst.
 
 ```bash
-qrate cull /path/to/photos --burst-threshold 2.0
+qrate group-bursts /path/to/photos --threshold 2.0
 ```
 
 ### `qrate export <directory>`
@@ -119,8 +119,8 @@ qrate index /Volumes/NIKON/DCIM
 # 2. See the scores
 qrate score /Volumes/NIKON/DCIM --top 20 -v
 
-# 3. Detect and cull bursts
-qrate cull /Volumes/NIKON/DCIM
+# 3. Detect and group bursts
+qrate group-bursts /Volumes/NIKON/DCIM
 
 # 4. Export best shots with Lightroom ratings
 qrate export /Volumes/NIKON/DCIM --out . --format xmp --top 50 --rating 5
